@@ -14,9 +14,7 @@ $model->file=file_get_contents("php://input");
 
 http://sample_domain_endpoint.com/data?key=Phyllobates&value=Terribilis&foo=
  */
-require_once 'Config.php';
-
-class Animal extends Config
+class Animal
 {
 	//public $App;
 	private $params;
@@ -41,102 +39,20 @@ class Animal extends Config
 		$food="";
 		$errorMessage="";
 
-		//if(!empty(file_get_contents("php://input"))){
+		if(!empty(file_get_contents("php://input"))){
 
-			try{
 				$raw=(file_get_contents("php://input"));
 				//some test data for filling
-				$raw='{
-					  "endpoint":{
-						"method":"POST",
-						"url":"http://test.com/tst.php?key={key}&value={value}&foo={bar}"
-					  },
-					  "data":[
-						{
-						  "key":"Azureus",
-						  "value":"Dendrobates"
-						},
-						{
-						  "key":"Phyllobates",
-						  "value":"Terribilis"
-						},
-						{
-						  "key":"Phyllobates1",
-						  "value":"Terribilis1"
-						},
-						 {
-						  "key":"Azureus",
-						  "value":"Dendrobates"
-						},
-						{
-						  "key":"Phyllobates",
-						  "value":"Terribilis"
-						},
-						{
-						  "key":"Phyllobates1",
-						  "value":"Terribilis1"
-						},
-						 {
-						  "key":"Azureus",
-						  "value":"Dendrobates"
-						},
-						{
-						  "key":"Phyllobates",
-						  "value":"Terribilis"
-						},
-						{
-						  "key":"Phyllobates1",
-						  "value":"Terribilis1"
-						},
-						 {
-						  "key":"Azureus",
-						  "value":"Dendrobates"
-						},
-						{
-						  "key":"Phyllobates",
-						  "value":"Terribilis"
-						},
-						{
-						  "key":"Phyllobates6",
-						  "value":"Terribilis1"
-						},
-						 {
-						  "key":"Azureus",
-						  "value":"Dendrobates"
-						},
-						{
-						  "key":"Phyllobates",
-						  "value":"Terribilis"
-						},
-						{
-						  "key":"Phyllobates1",
-						  "value":"Terribilis1"
-						}, {
-						  "key":"Azureus",
-						  "value":"Dendrobates"
-						},
-						{
-						  "key":"Phyllobates",
-						  "value":"Terribilis"
-						},
-						{
-						  "key":"Phyllobates1",
-						  "value":"Terribilis1"
-						},
-						{
-						  "key":"Phyllobates",
-						  "value":"Terribilis"
-						},
-						{
-						  "key":"Phyllobates1",
-						  "value":"Terribilis1"
-						}
 
-					  ]
-					}';
+				if($food=json_decode($raw,true)){
 
-				$food=json_decode($raw,true);
+				}else{
+					header("HTTP/1.0 400 Error");
+					echo "invalid JSON format";
+				}
 
+
+				if($food!=""){
 				// Validation block, to check if payLoad have endpoint, correct url provided and allowed method
 				if(isset($food['endpoint'])){
 					if(isset($food['data'])){
@@ -166,37 +82,35 @@ class Animal extends Config
 
 						$countCalls=0;
 						if(strtolower($food['endpoint']['method'])=='post'){
-							//if post, then all data will be submitted at once
-
-							for($i=0;$i<1000;$i++){ //todo temporary to test filling
-								$recordUUI=sha1(microtime().$raw);
+							//if post, then all data will be submitted at onst filling
+								$recordUUI=sha1(microtime().$raw. mt_rand());
 								$time=time();
 
 								$args=array('load'=>$raw,'time'=>$time,'count'=>0);
 
 								//saving data into redis, using multi to save roundtrips
+
 								$redis->multi()
 								->hMset($recordUUI,$args)
-								->lPush('que', $recordUUI)
+								//->lPush('que', $recordUUI)
 								->zAdd('sQue', $time, $recordUUI)
 								->incrBy('postCalls',1)
 								->incrBy('requestCount',1)
 								->incrBy('loadVolume', mb_strlen($raw, '8bit'))
 								->exec();
-								}
+
 							}
 
 						if(strtolower($food['endpoint']['method'])=="get"){
 							//for GET compatibility sake break load into multiple calls
-							$recordData[]='que';
+							//$recordData[]='que';
 							$recordDataForSortedSet[]='sQue';
-							$time=time();
-
-							for($i=0;$i<50;$i++){ //todo temp for test filling
 
 								foreach($food['data'] as $index=>$data){
 
-									$recordUUI=sha1(microtime().$raw);
+									$time=time();
+									$recordUUI=sha1(microtime().$raw. mt_rand());
+
 									$recordData[]=$recordUUI;
 									$recordDataForSortedSet[]=$time;
 									$recordDataForSortedSet[]=$recordUUI;
@@ -207,12 +121,12 @@ class Animal extends Config
 									$redis->hMset($recordUUI,$args);
 									$countCalls++;
 								}
-							}
 
 
 							//saving data into redis, didn't find method to use multi for that
-							call_user_func_array(array($redis, 'lpush'), $recordData);
-							call_user_func_array(array($redis, 'zAdd'),$recordDataForSortedSet);
+							//call_user_func_array(array($redis, 'lpush'), $recordData);
+
+							call_user_func_array(array($redis, 'zAdd'),$recordDataForSortedSet); //sorted list for process
 
 							$redis->multi()
 								->incrBy('requestCount',1)
@@ -226,6 +140,8 @@ class Animal extends Config
 						}
 
 
+
+						echo 'ok';
 						$redis->publish('queue', '1');
 
 
@@ -239,12 +155,11 @@ class Animal extends Config
 					header("HTTP/1.0 400 Error");
 					echo $errorMessage;
 				}
-
-			} catch (Exception $e) {
-				$errorMessage='Uncaught Exception: '.json_encode($e);
-				header("HTTP/1.0 400 Error");
-				echo $errorMessage;
 			}
+		}else{
+			header("HTTP/1.0 400 Error");
+			echo "No Payload";
+		}
 	}
 
 
@@ -252,23 +167,7 @@ class Animal extends Config
 
 $obj = new Animal();
 
-
-echo 'sss';
 $obj->feed();
-
-
-for($i=0;$i<50;$i++){
-	$obj->feed();
-	if($i % 50==0){
-		$redis = new Redis();
-
-		if($redis->connect('127.0.0.1', 6379)){
-			$redis->publish('queue', '1');
-		}
-
-	}
-
-}
 
 $data = xhprof_disable();
 
