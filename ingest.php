@@ -117,7 +117,7 @@ class Animal
 
 									$breaking['endpoint']=$food['endpoint'];
 									$breaking['data']=$data;
-									$args=array('load'=>json_encode($breaking),'time'=>$time,'count'=>0);
+									$args=array('load'=>json_encode($breaking, JSON_UNESCAPED_SLASHES),'time'=>$time,'count'=>0);
 									$redis->hMset($recordUUI,$args);
 									$countCalls++;
 								}
